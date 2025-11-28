@@ -1,0 +1,231 @@
+'use client'
+
+import { Play, Download, FileJson, FileSpreadsheet, Loader2, AlertCircle, Database } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu'
+import { useQueryStore, useConnectionStore } from '@/stores'
+import { DataTable } from '@/components/data-table'
+
+export function QueryEditor() {
+  const activeConnection = useConnectionStore((s) => s.getActiveConnection())
+  const { currentQuery, isExecuting, result, error } = useQueryStore()
+  const setIsExecuting = useQueryStore((s) => s.setIsExecuting)
+  const addToHistory = useQueryStore((s) => s.addToHistory)
+
+  const handleRunQuery = () => {
+    if (!activeConnection || isExecuting) return
+
+    setIsExecuting(true)
+
+    // Simulate query execution (in real app, this would be IPC call)
+    const startTime = Date.now()
+    setTimeout(() => {
+      const durationMs = Date.now() - startTime + Math.random() * 50
+
+      // Add to history
+      addToHistory({
+        query: currentQuery,
+        durationMs: Math.round(durationMs),
+        rowCount: result?.rowCount ?? 0,
+        status: 'success',
+        connectionId: activeConnection.id
+      })
+
+      setIsExecuting(false)
+    }, 300 + Math.random() * 200)
+  }
+
+  if (!activeConnection) {
+    return (
+      <div className="flex flex-1 items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="size-16 rounded-full bg-muted/50 flex items-center justify-center mx-auto">
+            <Database className="size-8 text-muted-foreground" />
+          </div>
+          <div>
+            <h2 className="text-lg font-medium">No Connection Selected</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Select a database connection from the sidebar to start querying.
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-1 flex-col overflow-hidden">
+      {/* Query Editor Section */}
+      <div className="flex flex-col border-b border-border/40 shrink-0">
+        {/* Editor Placeholder - Will be Monaco */}
+        <div className="h-40 bg-muted/30 p-3">
+          <div className="h-full rounded-lg border border-border/50 bg-background/50 p-3 font-mono text-sm overflow-auto">
+            {currentQuery.split('\n').map((line, i) => (
+              <div key={i} className="text-muted-foreground whitespace-pre leading-relaxed">
+                {line
+                  .split(
+                    /(\b(?:SELECT|FROM|WHERE|ORDER BY|LIMIT|INSERT|UPDATE|DELETE|SET|AND|OR|JOIN|LEFT|RIGHT|INNER|ON|GROUP BY|HAVING|AS|INTO|VALUES|CREATE|ALTER|DROP|DESC|ASC|NULL|NOT|IN|LIKE|BETWEEN)\b)/gi
+                  )
+                  .map((part, j) => {
+                    const upperPart = part.toUpperCase()
+                    if (
+                      [
+                        'SELECT',
+                        'FROM',
+                        'WHERE',
+                        'ORDER BY',
+                        'LIMIT',
+                        'INSERT',
+                        'UPDATE',
+                        'DELETE',
+                        'SET',
+                        'AND',
+                        'OR',
+                        'JOIN',
+                        'LEFT',
+                        'RIGHT',
+                        'INNER',
+                        'ON',
+                        'GROUP BY',
+                        'HAVING',
+                        'AS',
+                        'INTO',
+                        'VALUES',
+                        'CREATE',
+                        'ALTER',
+                        'DROP',
+                        'NOT',
+                        'IN',
+                        'LIKE',
+                        'BETWEEN'
+                      ].includes(upperPart)
+                    ) {
+                      return (
+                        <span key={j} className="text-blue-400">
+                          {part}
+                        </span>
+                      )
+                    }
+                    if (['DESC', 'ASC', 'NULL'].includes(upperPart)) {
+                      return (
+                        <span key={j} className="text-purple-400">
+                          {part}
+                        </span>
+                      )
+                    }
+                    if (part.match(/^'[^']*'$/)) {
+                      return (
+                        <span key={j} className="text-green-400">
+                          {part}
+                        </span>
+                      )
+                    }
+                    if (part.match(/^\d+$/)) {
+                      return (
+                        <span key={j} className="text-orange-400">
+                          {part}
+                        </span>
+                      )
+                    }
+                    return part
+                  })}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Editor Toolbar */}
+        <div className="flex items-center justify-between border-t border-border/40 bg-muted/20 px-3 py-1.5">
+          <div className="flex items-center gap-2">
+            <Button size="sm" className="gap-1.5 h-7" disabled={isExecuting} onClick={handleRunQuery}>
+              {isExecuting ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <Play className="size-3.5" />
+              )}
+              Run
+              <kbd className="ml-1 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium">⌘↵</kbd>
+            </Button>
+          </div>
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <span
+                className={`size-1.5 rounded-full ${activeConnection.isConnected ? 'bg-green-500' : 'bg-yellow-500'}`}
+              />
+              {activeConnection.name}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Results Section */}
+      <div className="flex flex-1 flex-col overflow-hidden">
+        {error ? (
+          <div className="flex-1 flex items-center justify-center p-4">
+            <div className="max-w-md text-center space-y-2">
+              <AlertCircle className="size-8 text-red-400 mx-auto" />
+              <h3 className="font-medium text-red-400">Query Error</h3>
+              <p className="text-sm text-muted-foreground">{error}</p>
+            </div>
+          </div>
+        ) : result ? (
+          <>
+            {/* Results Table */}
+            <div className="flex-1 overflow-hidden p-3">
+              <DataTable
+                columns={result.columns}
+                data={result.rows as Record<string, unknown>[]}
+                pageSize={50}
+              />
+            </div>
+
+            {/* Results Footer */}
+            <div className="flex items-center justify-between border-t border-border/40 bg-muted/20 px-3 py-1.5 shrink-0">
+              <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                <span className="flex items-center gap-1.5">
+                  <span className="size-1.5 rounded-full bg-green-500" />
+                  {result.rowCount} rows returned
+                </span>
+                <span>{result.durationMs}ms</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="gap-1.5 h-7">
+                      <Download className="size-3.5" />
+                      Export
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem>
+                      <FileSpreadsheet className="size-4 text-muted-foreground" />
+                      Export as CSV
+                    </DropdownMenuItem>
+                    <DropdownMenuItem>
+                      <FileJson className="size-4 text-muted-foreground" />
+                      Export as JSON
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center space-y-2">
+              <p className="text-muted-foreground">Run a query to see results</p>
+              <p className="text-xs text-muted-foreground/70">
+                Click on a table in the sidebar to generate a SELECT query
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
