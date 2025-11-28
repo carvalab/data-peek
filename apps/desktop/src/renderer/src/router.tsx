@@ -1,10 +1,4 @@
-import {
-  createRouter,
-  createRootRoute,
-  createRoute,
-  Outlet,
-  Link
-} from '@tanstack/react-router'
+import { createRouter, createRootRoute, createRoute, Outlet, Link } from '@tanstack/react-router'
 import { Moon, Sun, Monitor } from 'lucide-react'
 import { ThemeProvider, useTheme } from '@/components/theme-provider'
 import { AppSidebar } from '@/components/app-sidebar'
@@ -95,6 +89,25 @@ function ThemeOption({
   )
 }
 
+// Keyboard shortcut display component
+function ShortcutRow({ keys, description }: { keys: string[]; description: string }) {
+  return (
+    <div className="flex items-center justify-between py-2 border-b border-border/30 last:border-0">
+      <span className="text-sm text-foreground">{description}</span>
+      <div className="flex items-center gap-1">
+        {keys.map((key, index) => (
+          <span key={index} className="flex items-center gap-1">
+            {index > 0 && <span className="text-xs text-muted-foreground">+</span>}
+            <kbd className="px-2 py-1 text-xs font-semibold text-foreground bg-muted border border-border/50 rounded shadow-sm">
+              {key}
+            </kbd>
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // Settings Page
 function SettingsPage() {
   const { theme, setTheme } = useTheme()
@@ -136,6 +149,54 @@ function SettingsPage() {
               currentTheme={theme}
               onSelect={setTheme}
             />
+          </div>
+        </div>
+
+        {/* Keyboard Shortcuts */}
+        <div className="rounded-lg border border-border/50 bg-card p-4">
+          <h2 className="text-lg font-medium mb-2">Keyboard Shortcuts</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            All available keyboard shortcuts in the application.
+          </p>
+
+          <div className="space-y-4">
+            {/* Tab Management */}
+            <div>
+              <h3 className="text-sm font-semibold text-foreground mb-2">Tab Management</h3>
+              <div className="space-y-1">
+                <ShortcutRow keys={['⌘', 'T']} description="Create new query tab" />
+                <ShortcutRow keys={['⌘', 'W']} description="Close current tab" />
+                <ShortcutRow keys={['⌘', '1-9']} description="Switch to tab by number" />
+                <ShortcutRow keys={['⌘', 'Tab']} description="Switch to next tab" />
+                <ShortcutRow keys={['⌘', 'Shift', 'Tab']} description="Switch to previous tab" />
+              </div>
+            </div>
+
+            {/* Sidebar */}
+            <div>
+              <h3 className="text-sm font-semibold text-foreground mb-2">Sidebar</h3>
+              <div className="space-y-1">
+                <ShortcutRow keys={['⌘', 'B']} description="Toggle sidebar visibility" />
+              </div>
+            </div>
+
+            {/* Query Editor */}
+            <div>
+              <h3 className="text-sm font-semibold text-foreground mb-2">Query Editor</h3>
+              <div className="space-y-1">
+                <ShortcutRow keys={['⌘', 'Enter']} description="Execute/run current query" />
+                <ShortcutRow keys={['⌘', 'Shift', 'F']} description="Format SQL query" />
+              </div>
+            </div>
+
+            {/* Foreign Keys */}
+            <div>
+              <h3 className="text-sm font-semibold text-foreground mb-2">Foreign Keys</h3>
+              <div className="space-y-1">
+                <ShortcutRow keys={['⌘', 'Click']} description="Open foreign key in new tab" />
+                <ShortcutRow keys={['Click']} description="Open foreign key in side panel" />
+              </div>
+            </div>
           </div>
         </div>
 

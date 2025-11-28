@@ -1,5 +1,5 @@
 import { ElectronAPI } from '@electron-toolkit/preload'
-import type { ConnectionConfig, IpcResponse, DatabaseSchema } from '@shared/index'
+import type { ConnectionConfig, IpcResponse, DatabaseSchema, EditBatch, EditResult } from '@shared/index'
 
 interface DataPeekApi {
   connections: {
@@ -12,6 +12,8 @@ interface DataPeekApi {
     connect: (config: ConnectionConfig) => Promise<IpcResponse<void>>
     query: (config: ConnectionConfig, query: string) => Promise<IpcResponse<unknown>>
     schemas: (config: ConnectionConfig) => Promise<IpcResponse<DatabaseSchema>>
+    execute: (config: ConnectionConfig, batch: EditBatch) => Promise<IpcResponse<EditResult>>
+    previewSql: (batch: EditBatch) => Promise<IpcResponse<Array<{ operationId: string; sql: string }>>>
   }
 }
 

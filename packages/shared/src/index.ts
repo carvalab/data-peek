@@ -101,3 +101,117 @@ export interface DatabaseSchema {
   /** When the schema was last fetched */
   fetchedAt: number;
 }
+
+// ============================================
+// Edit Operation Types - Database Agnostic
+// ============================================
+
+/**
+ * Represents a single cell change
+ */
+export interface CellChange {
+  column: string;
+  oldValue: unknown;
+  newValue: unknown;
+  dataType: string;
+}
+
+/**
+ * Primary key value(s) for identifying a row
+ * Supports composite primary keys
+ */
+export interface PrimaryKeyValue {
+  column: string;
+  value: unknown;
+  dataType: string;
+}
+
+/**
+ * Represents a row modification (UPDATE)
+ */
+export interface RowUpdate {
+  type: 'update';
+  /** Unique identifier for this change (client-side) */
+  id: string;
+  /** Primary key(s) to identify the row */
+  primaryKeys: PrimaryKeyValue[];
+  /** Changed cells */
+  changes: CellChange[];
+  /** Original row data for reference */
+  originalRow: Record<string, unknown>;
+}
+
+/**
+ * Represents a row insertion (INSERT)
+ */
+export interface RowInsert {
+  type: 'insert';
+  /** Unique identifier for this change (client-side) */
+  id: string;
+  /** New row data */
+  values: Record<string, unknown>;
+  /** Column metadata for type information */
+  columns: Array<{ name: string; dataType: string }>;
+}
+
+/**
+ * Represents a row deletion (DELETE)
+ */
+export interface RowDelete {
+  type: 'delete';
+  /** Unique identifier for this change (client-side) */
+  id: string;
+  /** Primary key(s) to identify the row */
+  primaryKeys: PrimaryKeyValue[];
+  /** Original row data for reference/undo */
+  originalRow: Record<string, unknown>;
+}
+
+/**
+ * Union type for all edit operations
+ */
+export type EditOperation = RowUpdate | RowInsert | RowDelete;
+
+/**
+ * Context for edit operations - identifies the target table
+ */
+export interface EditContext {
+  schema: string;
+  table: string;
+  /** Primary key column names */
+  primaryKeyColumns: string[];
+  /** All columns with their types */
+  columns: ColumnInfo[];
+}
+
+/**
+ * Batch of edit operations to execute
+ */
+export interface EditBatch {
+  context: EditContext;
+  operations: EditOperation[];
+}
+
+/**
+ * Result of executing edit operations
+ */
+export interface EditResult {
+  success: boolean;
+  /** Number of rows affected */
+  rowsAffected: number;
+  /** Generated SQL statements (for transparency) */
+  executedSql: string[];
+  /** Any errors that occurred */
+  errors?: Array<{
+    operationId: string;
+    message: string;
+  }>;
+}
+
+/**
+ * SQL statement with parameters (for parameterized queries)
+ */
+export interface ParameterizedQuery {
+  sql: string;
+  params: unknown[];
+}

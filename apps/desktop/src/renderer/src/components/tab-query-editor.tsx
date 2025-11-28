@@ -23,7 +23,17 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useTabStore, useConnectionStore, useQueryStore } from '@/stores'
 import type { Tab } from '@/stores/tab-store'
-import { DataTable, type DataTableFilter, type DataTableSort, type DataTableColumn } from '@/components/data-table'
+import {
+  DataTable,
+  type DataTableFilter,
+  type DataTableSort,
+  type DataTableColumn
+} from '@/components/data-table'
+import {
+  EditableDataTable,
+  type DataTableColumn as EditableDataTableColumn
+} from '@/components/editable-data-table'
+import type { EditContext } from '@data-peek/shared'
 import { SQLEditor } from '@/components/sql-editor'
 import { formatSQL } from '@/lib/sql-formatter'
 import type { QueryResult as IpcQueryResult, ForeignKeyInfo, ColumnInfo } from '@data-peek/shared'
@@ -173,14 +183,60 @@ export function TabQueryEditor({ tabId }: TabQueryEditorProps) {
     })
   }, [tab, schemas])
 
+  // Helper: Get columns with full info including isPrimaryKey (for editable table)
+  const getColumnsForEditing = useCallback((): EditableDataTableColumn[] => {
+    if (!tab?.result?.columns || tab.type !== 'table-preview') return []
+
+    const schema = schemas.find((s) => s.name === tab.schemaName)
+    const tableInfo = schema?.tables.find((t) => t.name === tab.tableName)
+
+    if (!tableInfo) return []
+
+    return tab.result.columns.map((col) => {
+      const schemaCol = tableInfo.columns.find((c) => c.name === col.name)
+      return {
+        name: col.name,
+        dataType: col.dataType,
+        foreignKey: schemaCol?.foreignKey,
+        isPrimaryKey: schemaCol?.isPrimaryKey ?? false,
+        isNullable: schemaCol?.isNullable ?? true
+      }
+    })
+  }, [tab, schemas])
+
+  // Helper: Build EditContext for table-preview tabs
+  const getEditContext = useCallback((): EditContext | null => {
+    if (!tab || tab.type !== 'table-preview') return null
+
+    const schema = schemas.find((s) => s.name === tab.schemaName)
+    const tableInfo = schema?.tables.find((t) => t.name === tab.tableName)
+
+    if (!tableInfo) return null
+
+    const primaryKeyColumns = tableInfo.columns
+      .filter((c) => c.isPrimaryKey)
+      .map((c) => c.name)
+
+    return {
+      schema: tab.schemaName,
+      table: tab.tableName,
+      primaryKeyColumns,
+      columns: tableInfo.columns
+    }
+  }, [tab, schemas])
+
   // FK Panel: Fetch data for a referenced row
   const fetchFKData = useCallback(
-    async (fk: ForeignKeyInfo, value: unknown): Promise<{ data?: Record<string, unknown>; columns?: ColumnInfo[]; error?: string }> => {
+    async (
+      fk: ForeignKeyInfo,
+      value: unknown
+    ): Promise<{ data?: Record<string, unknown>; columns?: ColumnInfo[]; error?: string }> => {
       if (!tabConnection) return { error: 'No connection' }
 
-      const tableRef = fk.referencedSchema === 'public'
-        ? fk.referencedTable
-        : `${fk.referencedSchema}.${fk.referencedTable}`
+      const tableRef =
+        fk.referencedSchema === 'public'
+          ? fk.referencedTable
+          : `${fk.referencedSchema}.${fk.referencedTable}`
 
       // Format value for SQL
       let formattedValue: string
@@ -238,7 +294,13 @@ export function TabQueryEditor({ tabId }: TabQueryEditorProps) {
       setFkPanels((prev) =>
         prev.map((p) =>
           p.id === panelId
-            ? { ...p, isLoading: false, data: result.data, columns: result.columns, error: result.error }
+            ? {
+                ...p,
+                isLoading: false,
+                data: result.data,
+                columns: result.columns,
+                error: result.error
+              }
             : p
         )
       )
@@ -491,15 +553,32 @@ export function TabQueryEditor({ tabId }: TabQueryEditorProps) {
           <>
             {/* Results Table */}
             <div className="flex-1 overflow-hidden p-3">
-              <DataTable
-                columns={getColumnsWithFKInfo()}
-                data={paginatedRows as Record<string, unknown>[]}
-                pageSize={tab.pageSize}
-                onFiltersChange={setTableFilters}
-                onSortingChange={setTableSorting}
-                onForeignKeyClick={handleFKClick}
-                onForeignKeyOpenTab={handleFKOpenTab}
-              />
+              {tab.type === 'table-preview' ? (
+                <EditableDataTable
+                  tabId={tabId}
+                  columns={getColumnsForEditing()}
+                  data={paginatedRows as Record<string, unknown>[]}
+                  pageSize={tab.pageSize}
+                  canEdit={true}
+                  editContext={getEditContext()}
+                  connection={tabConnection}
+                  onFiltersChange={setTableFilters}
+                  onSortingChange={setTableSorting}
+                  onForeignKeyClick={handleFKClick}
+                  onForeignKeyOpenTab={handleFKOpenTab}
+                  onChangesCommitted={handleRunQuery}
+                />
+              ) : (
+                <DataTable
+                  columns={getColumnsWithFKInfo()}
+                  data={paginatedRows as Record<string, unknown>[]}
+                  pageSize={tab.pageSize}
+                  onFiltersChange={setTableFilters}
+                  onSortingChange={setTableSorting}
+                  onForeignKeyClick={handleFKClick}
+                  onForeignKeyOpenTab={handleFKOpenTab}
+                />
+              )}
             </div>
 
             {/* Results Footer */}
