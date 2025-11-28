@@ -26,6 +26,7 @@ export function SidebarQuickQuery() {
   const [isRunning, setIsRunning] = React.useState(false)
 
   const activeConnection = useConnectionStore((s) => s.getActiveConnection())
+  const schemas = useConnectionStore((s) => s.schemas)
   const { history } = useQueryStore()
   const setCurrentQuery = useQueryStore((s) => s.setCurrentQuery)
   const addToHistory = useQueryStore((s) => s.addToHistory)
@@ -100,6 +101,7 @@ export function SidebarQuickQuery() {
                 compact
                 placeholder="Quick SQL..."
                 readOnly={!activeConnection}
+                schemas={schemas}
               />
 
               {/* Action Buttons */}

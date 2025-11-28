@@ -7,6 +7,7 @@ import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
 import { formatSQL } from '@/lib/sql-formatter'
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/components/theme-provider'
+import type { SchemaInfo } from '@data-peek/shared'
 
 // Configure Monaco workers for Vite + Electron (avoids CSP issues)
 self.MonacoEnvironment = {
@@ -20,6 +21,233 @@ loader.config({ monaco })
 
 type EditorType = monaco.editor.IStandaloneCodeEditor
 
+// SQL Keywords for autocomplete
+const SQL_KEYWORDS = [
+  'SELECT', 'FROM', 'WHERE', 'AND', 'OR', 'NOT', 'IN', 'LIKE', 'BETWEEN',
+  'IS', 'NULL', 'TRUE', 'FALSE', 'AS', 'ON', 'JOIN', 'LEFT', 'RIGHT',
+  'INNER', 'OUTER', 'FULL', 'CROSS', 'NATURAL', 'USING', 'ORDER', 'BY',
+  'ASC', 'DESC', 'NULLS', 'FIRST', 'LAST', 'GROUP', 'HAVING', 'LIMIT',
+  'OFFSET', 'UNION', 'ALL', 'INTERSECT', 'EXCEPT', 'DISTINCT', 'CASE',
+  'WHEN', 'THEN', 'ELSE', 'END', 'CAST', 'INSERT', 'INTO', 'VALUES',
+  'UPDATE', 'SET', 'DELETE', 'CREATE', 'TABLE', 'INDEX', 'VIEW', 'DROP',
+  'ALTER', 'ADD', 'COLUMN', 'PRIMARY', 'KEY', 'FOREIGN', 'REFERENCES',
+  'CONSTRAINT', 'UNIQUE', 'CHECK', 'DEFAULT', 'CASCADE', 'RESTRICT',
+  'TRUNCATE', 'EXISTS', 'WITH', 'RECURSIVE', 'RETURNING', 'EXPLAIN',
+  'ANALYZE', 'VACUUM', 'BEGIN', 'COMMIT', 'ROLLBACK', 'TRANSACTION',
+  'SAVEPOINT', 'RELEASE', 'TEMPORARY', 'TEMP', 'IF', 'REPLACE', 'IGNORE'
+]
+
+// SQL Functions for autocomplete
+const SQL_FUNCTIONS = [
+  // Aggregate functions
+  { name: 'COUNT', signature: 'COUNT(expression)', description: 'Returns the number of rows' },
+  { name: 'SUM', signature: 'SUM(expression)', description: 'Returns the sum of values' },
+  { name: 'AVG', signature: 'AVG(expression)', description: 'Returns the average value' },
+  { name: 'MIN', signature: 'MIN(expression)', description: 'Returns the minimum value' },
+  { name: 'MAX', signature: 'MAX(expression)', description: 'Returns the maximum value' },
+  { name: 'GROUP_CONCAT', signature: 'GROUP_CONCAT(expression)', description: 'Concatenates values from a group' },
+  // String functions
+  { name: 'CONCAT', signature: 'CONCAT(str1, str2, ...)', description: 'Concatenates strings' },
+  { name: 'SUBSTRING', signature: 'SUBSTRING(str, start, length)', description: 'Extracts a substring' },
+  { name: 'UPPER', signature: 'UPPER(str)', description: 'Converts to uppercase' },
+  { name: 'LOWER', signature: 'LOWER(str)', description: 'Converts to lowercase' },
+  { name: 'TRIM', signature: 'TRIM(str)', description: 'Removes leading/trailing whitespace' },
+  { name: 'LENGTH', signature: 'LENGTH(str)', description: 'Returns string length' },
+  { name: 'REPLACE', signature: 'REPLACE(str, from, to)', description: 'Replaces occurrences' },
+  { name: 'COALESCE', signature: 'COALESCE(val1, val2, ...)', description: 'Returns first non-null value' },
+  { name: 'NULLIF', signature: 'NULLIF(val1, val2)', description: 'Returns null if values are equal' },
+  { name: 'IFNULL', signature: 'IFNULL(val, default)', description: 'Returns default if null' },
+  // Date functions
+  { name: 'NOW', signature: 'NOW()', description: 'Returns current timestamp' },
+  { name: 'DATE', signature: 'DATE(expression)', description: 'Extracts date part' },
+  { name: 'TIME', signature: 'TIME(expression)', description: 'Extracts time part' },
+  { name: 'DATETIME', signature: 'DATETIME(expression)', description: 'Creates datetime value' },
+  { name: 'STRFTIME', signature: "STRFTIME(format, datetime)", description: 'Formats datetime' },
+  // Math functions
+  { name: 'ABS', signature: 'ABS(number)', description: 'Returns absolute value' },
+  { name: 'ROUND', signature: 'ROUND(number, decimals)', description: 'Rounds a number' },
+  { name: 'CEIL', signature: 'CEIL(number)', description: 'Rounds up to nearest integer' },
+  { name: 'FLOOR', signature: 'FLOOR(number)', description: 'Rounds down to nearest integer' },
+  { name: 'RANDOM', signature: 'RANDOM()', description: 'Returns random number' },
+  // Type functions
+  { name: 'TYPEOF', signature: 'TYPEOF(expression)', description: 'Returns the type of value' },
+  { name: 'CAST', signature: 'CAST(expression AS type)', description: 'Converts to specified type' },
+  // SQLite specific
+  { name: 'PRINTF', signature: "PRINTF(format, ...)", description: 'Formatted string output' },
+  { name: 'INSTR', signature: 'INSTR(str, substr)', description: 'Returns position of substring' },
+  { name: 'GLOB', signature: 'GLOB(pattern, str)', description: 'Pattern matching with glob' },
+  { name: 'HEX', signature: 'HEX(value)', description: 'Returns hex representation' },
+  { name: 'QUOTE', signature: 'QUOTE(value)', description: 'Returns SQL literal' },
+  { name: 'ZEROBLOB', signature: 'ZEROBLOB(n)', description: 'Returns n-byte blob of zeros' },
+  { name: 'JSON', signature: 'JSON(value)', description: 'Validates and minifies JSON' },
+  { name: 'JSON_EXTRACT', signature: "JSON_EXTRACT(json, path)", description: 'Extracts value from JSON' },
+  { name: 'JSON_ARRAY', signature: 'JSON_ARRAY(...)', description: 'Creates JSON array' },
+  { name: 'JSON_OBJECT', signature: 'JSON_OBJECT(...)', description: 'Creates JSON object' }
+]
+
+// SQL Data types
+const SQL_TYPES = [
+  'INTEGER', 'INT', 'SMALLINT', 'BIGINT', 'TINYINT',
+  'REAL', 'FLOAT', 'DOUBLE', 'DECIMAL', 'NUMERIC',
+  'TEXT', 'VARCHAR', 'CHAR', 'CLOB', 'STRING',
+  'BLOB', 'BINARY', 'VARBINARY',
+  'BOOLEAN', 'BOOL',
+  'DATE', 'TIME', 'DATETIME', 'TIMESTAMP',
+  'JSON', 'UUID'
+]
+
+// Register SQL completion provider - returns disposable for cleanup
+const registerSQLCompletionProvider = (
+  monacoInstance: Monaco,
+  schemas: SchemaInfo[] = []
+): monaco.IDisposable => {
+  return monacoInstance.languages.registerCompletionItemProvider('sql', {
+    triggerCharacters: [' ', '.', '(', ','],
+    provideCompletionItems: (model, position) => {
+      const word = model.getWordUntilPosition(position)
+      const range = {
+        startLineNumber: position.lineNumber,
+        endLineNumber: position.lineNumber,
+        startColumn: word.startColumn,
+        endColumn: word.endColumn
+      }
+
+      // Get the text before cursor to detect context (e.g., after ".")
+      const lineContent = model.getLineContent(position.lineNumber)
+      const textBeforeCursor = lineContent.substring(0, position.column - 1)
+      const dotMatch = textBeforeCursor.match(/(\w+)\.\s*$/)
+
+      const suggestions: monaco.languages.CompletionItem[] = []
+
+      // If after a dot, suggest columns for that table
+      if (dotMatch) {
+        const tableOrSchemaName = dotMatch[1].toLowerCase()
+
+        // Check if it's a schema name - suggest tables
+        const matchingSchema = schemas.find(
+          (s) => s.name.toLowerCase() === tableOrSchemaName
+        )
+        if (matchingSchema) {
+          matchingSchema.tables.forEach((table) => {
+            suggestions.push({
+              label: table.name,
+              kind:
+                table.type === 'view'
+                  ? monacoInstance.languages.CompletionItemKind.Interface
+                  : monacoInstance.languages.CompletionItemKind.Class,
+              insertText: table.name,
+              range,
+              detail: `${table.type} (${table.columns.length} columns)`,
+              documentation: table.columns.map((c) => `${c.name}: ${c.dataType}`).join('\n'),
+              sortText: '0' + table.name
+            })
+          })
+          return { suggestions }
+        }
+
+        // Check if it's a table name - suggest columns
+        for (const schema of schemas) {
+          const matchingTable = schema.tables.find(
+            (t) => t.name.toLowerCase() === tableOrSchemaName
+          )
+          if (matchingTable) {
+            matchingTable.columns.forEach((column) => {
+              const pkIndicator = column.isPrimaryKey ? ' 🔑' : ''
+              suggestions.push({
+                label: column.name,
+                kind: monacoInstance.languages.CompletionItemKind.Field,
+                insertText: column.name,
+                range,
+                detail: `${column.dataType}${column.isNullable ? '' : ' NOT NULL'}${pkIndicator}`,
+                documentation: `Column in ${matchingTable.name}\nType: ${column.dataType}\nNullable: ${column.isNullable}\nPrimary Key: ${column.isPrimaryKey}`,
+                sortText: String(column.ordinalPosition).padStart(3, '0')
+              })
+            })
+            return { suggestions }
+          }
+        }
+      }
+
+      // Add keywords
+      SQL_KEYWORDS.forEach((keyword) => {
+        suggestions.push({
+          label: keyword,
+          kind: monacoInstance.languages.CompletionItemKind.Keyword,
+          insertText: keyword,
+          range,
+          detail: 'Keyword',
+          sortText: '1' + keyword
+        })
+      })
+
+      // Add functions with snippets
+      SQL_FUNCTIONS.forEach((fn) => {
+        suggestions.push({
+          label: fn.name,
+          kind: monacoInstance.languages.CompletionItemKind.Function,
+          insertText: fn.name + '($0)',
+          insertTextRules: monacoInstance.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+          range,
+          detail: fn.signature,
+          documentation: fn.description,
+          sortText: '2' + fn.name
+        })
+      })
+
+      // Add data types
+      SQL_TYPES.forEach((type) => {
+        suggestions.push({
+          label: type,
+          kind: monacoInstance.languages.CompletionItemKind.TypeParameter,
+          insertText: type,
+          range,
+          detail: 'Data Type',
+          sortText: '3' + type
+        })
+      })
+
+      // Add schema names
+      schemas.forEach((schema) => {
+        suggestions.push({
+          label: schema.name,
+          kind: monacoInstance.languages.CompletionItemKind.Module,
+          insertText: schema.name,
+          range,
+          detail: `Schema (${schema.tables.length} tables)`,
+          sortText: '0a' + schema.name
+        })
+      })
+
+      // Add table names (with schema prefix for non-public)
+      schemas.forEach((schema) => {
+        schema.tables.forEach((table) => {
+          const isPublic = schema.name === 'public'
+          const insertText = isPublic ? table.name : `${schema.name}.${table.name}`
+          const labelSuffix = isPublic ? '' : ` (${schema.name})`
+
+          suggestions.push({
+            label: table.name + labelSuffix,
+            kind:
+              table.type === 'view'
+                ? monacoInstance.languages.CompletionItemKind.Interface
+                : monacoInstance.languages.CompletionItemKind.Class,
+            insertText: insertText,
+            range,
+            detail: `${table.type} (${table.columns.length} columns)`,
+            documentation: table.columns
+              .slice(0, 10)
+              .map((c) => `${c.isPrimaryKey ? '🔑 ' : ''}${c.name}: ${c.dataType}`)
+              .join('\n') + (table.columns.length > 10 ? `\n... and ${table.columns.length - 10} more` : ''),
+            sortText: '0b' + table.name
+          })
+        })
+      })
+
+      return { suggestions }
+    }
+  })
+}
+
 export interface SQLEditorProps {
   value: string
   onChange?: (value: string) => void
@@ -31,6 +259,8 @@ export interface SQLEditorProps {
   className?: string
   placeholder?: string
   compact?: boolean
+  /** Database schemas for autocomplete (tables, columns) */
+  schemas?: SchemaInfo[]
 }
 
 // Custom dark theme inspired by the app's aesthetic
@@ -120,11 +350,13 @@ export function SQLEditor({
   minHeight,
   className,
   placeholder = 'SELECT * FROM your_table LIMIT 100;',
-  compact = false
+  compact = false,
+  schemas = []
 }: SQLEditorProps) {
   const { theme } = useTheme()
   const editorRef = React.useRef<EditorType | null>(null)
   const monacoRef = React.useRef<Monaco | null>(null)
+  const completionProviderRef = React.useRef<monaco.IDisposable | null>(null)
 
   // Resolve system theme
   const resolvedTheme = React.useMemo(() => {
@@ -140,6 +372,9 @@ export function SQLEditor({
 
     // Define custom themes
     defineCustomTheme(monaco)
+
+    // Register SQL autocomplete provider with initial schemas
+    completionProviderRef.current = registerSQLCompletionProvider(monaco, schemas)
 
     // Set the theme based on current app theme
     const editorTheme = resolvedTheme === 'dark' ? 'data-peek-dark' : 'data-peek-light'
@@ -221,6 +456,25 @@ export function SQLEditor({
       monacoRef.current.editor.setTheme(editorTheme)
     }
   }, [resolvedTheme])
+
+  // Re-register completion provider when schemas change
+  React.useEffect(() => {
+    if (monacoRef.current) {
+      // Dispose previous provider
+      if (completionProviderRef.current) {
+        completionProviderRef.current.dispose()
+      }
+      // Register new provider with updated schemas
+      completionProviderRef.current = registerSQLCompletionProvider(monacoRef.current, schemas)
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (completionProviderRef.current) {
+        completionProviderRef.current.dispose()
+      }
+    }
+  }, [schemas])
 
   const handleChange = (newValue: string | undefined) => {
     onChange?.(newValue ?? '')

@@ -24,6 +24,7 @@ import { formatSQL } from '@/lib/sql-formatter'
 
 export function QueryEditor() {
   const activeConnection = useConnectionStore((s) => s.getActiveConnection())
+  const schemas = useConnectionStore((s) => s.schemas)
   const { currentQuery, isExecuting, result, error } = useQueryStore()
   const setCurrentQuery = useQueryStore((s) => s.setCurrentQuery)
   const setIsExecuting = useQueryStore((s) => s.setIsExecuting)
@@ -89,6 +90,7 @@ export function QueryEditor() {
             onFormat={handleFormatQuery}
             height={160}
             placeholder="SELECT * FROM your_table LIMIT 100;"
+            schemas={schemas}
           />
         </div>
 
