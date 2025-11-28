@@ -50,13 +50,14 @@ export function TabContainer() {
         return
       }
 
-      // Cmd+Tab / Cmd+Shift+Tab: Next/Previous tab
-      if (isMeta && e.key === 'Tab' && tabs.length > 1 && activeTabId) {
+      // Cmd+Option+ArrowRight: Next tab
+      // Cmd+Option+ArrowLeft: Previous tab
+      if (isMeta && e.altKey && (e.key === 'ArrowRight' || e.key === 'ArrowLeft') && tabs.length > 1 && activeTabId) {
         e.preventDefault()
         const currentIndex = tabs.findIndex((t) => t.id === activeTabId)
         let nextIndex: number
 
-        if (e.shiftKey) {
+        if (e.key === 'ArrowLeft') {
           // Previous tab
           nextIndex = currentIndex <= 0 ? tabs.length - 1 : currentIndex - 1
         } else {

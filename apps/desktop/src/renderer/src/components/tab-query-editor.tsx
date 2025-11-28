@@ -39,6 +39,7 @@ import { formatSQL } from '@/lib/sql-formatter'
 import type { QueryResult as IpcQueryResult, ForeignKeyInfo, ColumnInfo } from '@data-peek/shared'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { FKPanelStack, type FKPanelItem } from '@/components/fk-panel-stack'
+import { ERDVisualization } from '@/components/erd-visualization'
 
 interface TabQueryEditorProps {
   tabId: string
@@ -62,7 +63,7 @@ export function TabQueryEditor({ tabId }: TabQueryEditorProps) {
     : null
 
   const handleRunQuery = useCallback(async () => {
-    if (!tab || !tabConnection || tab.isExecuting || !tab.query.trim()) {
+    if (!tab || tab.type === 'erd' || !tabConnection || tab.isExecuting || !tab.query.trim()) {
       return
     }
 
@@ -117,7 +118,7 @@ export function TabQueryEditor({ tabId }: TabQueryEditorProps) {
   }, [tab, tabConnection, tabId, updateTabExecuting, updateTabResult, markTabSaved, addToHistory])
 
   const handleFormatQuery = () => {
-    if (!tab || !tab.query.trim()) return
+    if (!tab || tab.type === 'erd' || !tab.query.trim()) return
     const formatted = formatSQL(tab.query)
     updateTabQuery(tabId, formatted)
   }
@@ -144,7 +145,7 @@ export function TabQueryEditor({ tabId }: TabQueryEditorProps) {
 
   // Helper: Look up column info from schema (for FK details)
   const getColumnsWithFKInfo = useCallback((): DataTableColumn[] => {
-    if (!tab?.result?.columns) return []
+    if (!tab || tab.type === 'erd' || !tab.result?.columns) return []
 
     // For table-preview tabs, we can directly look up the columns from schema
     if (tab.type === 'table-preview') {
@@ -185,7 +186,7 @@ export function TabQueryEditor({ tabId }: TabQueryEditorProps) {
 
   // Helper: Get columns with full info including isPrimaryKey (for editable table)
   const getColumnsForEditing = useCallback((): EditableDataTableColumn[] => {
-    if (!tab?.result?.columns || tab.type !== 'table-preview') return []
+    if (!tab || tab.type === 'erd' || !tab.result?.columns || tab.type !== 'table-preview') return []
 
     const schema = schemas.find((s) => s.name === tab.schemaName)
     const tableInfo = schema?.tables.find((t) => t.name === tab.tableName)
@@ -364,7 +365,7 @@ export function TabQueryEditor({ tabId }: TabQueryEditorProps) {
 
   // Build a new query with filters/sorting applied
   const buildQueryWithFilters = (): string => {
-    if (!tab) return ''
+    if (!tab || tab.type === 'erd') return ''
 
     // For table preview tabs, rebuild from scratch
     if (tab.type === 'table-preview') {
@@ -446,6 +447,26 @@ export function TabQueryEditor({ tabId }: TabQueryEditorProps) {
               Select a different connection from the sidebar.
             </p>
           </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Render ERD visualization for ERD tabs
+  if (tab.type === 'erd') {
+    return (
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <div className="flex items-center justify-between border-b border-border/40 bg-muted/20 px-3 py-2">
+          <span className="text-sm font-medium">Entity Relationship Diagram</span>
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span
+              className={`size-1.5 rounded-full ${tabConnection.isConnected ? 'bg-green-500' : 'bg-yellow-500'}`}
+            />
+            {tabConnection.name}
+          </span>
+        </div>
+        <div className="flex-1">
+          <ERDVisualization schemas={schemas} />
         </div>
       </div>
     )

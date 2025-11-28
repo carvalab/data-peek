@@ -32,6 +32,7 @@ export function TabBar({ className }: TabBarProps) {
   const closeTab = useTabStore((s) => s.closeTab)
   const closeOtherTabs = useTabStore((s) => s.closeOtherTabs)
   const closeTabsToRight = useTabStore((s) => s.closeTabsToRight)
+  const closeAllTabs = useTabStore((s) => s.closeAllTabs)
   const pinTab = useTabStore((s) => s.pinTab)
   const unpinTab = useTabStore((s) => s.unpinTab)
   const reorderTabs = useTabStore((s) => s.reorderTabs)
@@ -103,6 +104,7 @@ export function TabBar({ className }: TabBarProps) {
               onUnpin={() => unpinTab(tab.id)}
               onCloseOthers={() => closeOtherTabs(tab.id)}
               onCloseToRight={() => closeTabsToRight(tab.id)}
+              onCloseAll={closeAllTabs}
             />
           ))}
         </SortableContext>

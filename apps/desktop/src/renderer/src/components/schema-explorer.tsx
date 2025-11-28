@@ -9,15 +9,18 @@ import {
   Table2,
   Database as SchemaIcon,
   Loader2,
-  XCircle
+  XCircle,
+  Search,
+  X,
+  Network
 } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { Input } from '@/components/ui/input'
 import {
   SidebarGroup,
-  SidebarGroupAction,
   SidebarGroupContent,
   SidebarGroupLabel,
   SidebarMenu,
@@ -66,11 +69,37 @@ export function SchemaExplorer() {
   const fetchSchemas = useConnectionStore((s) => s.fetchSchemas)
 
   const createTablePreviewTab = useTabStore((s) => s.createTablePreviewTab)
+  const findTablePreviewTab = useTabStore((s) => s.findTablePreviewTab)
+  const setActiveTab = useTabStore((s) => s.setActiveTab)
+  const createERDTab = useTabStore((s) => s.createERDTab)
 
   const [expandedSchemas, setExpandedSchemas] = React.useState<Set<string>>(
     new Set(schemas.map((s) => s.name))
   )
   const [expandedTables, setExpandedTables] = React.useState<Set<string>>(new Set())
+  const [searchQuery, setSearchQuery] = React.useState('')
+
+  // Filter schemas and tables based on search query
+  const filteredSchemas = React.useMemo(() => {
+    if (!searchQuery.trim()) return schemas
+
+    const query = searchQuery.toLowerCase()
+    return schemas
+      .map((schema) => ({
+        ...schema,
+        tables: schema.tables.filter((table) =>
+          table.name.toLowerCase().includes(query)
+        )
+      }))
+      .filter((schema) => schema.tables.length > 0)
+  }, [schemas, searchQuery])
+
+  // Auto-expand schemas when searching
+  React.useEffect(() => {
+    if (searchQuery.trim()) {
+      setExpandedSchemas(new Set(filteredSchemas.map((s) => s.name)))
+    }
+  }, [searchQuery, filteredSchemas])
 
   // Update expanded schemas when schemas change
   React.useEffect(() => {
@@ -105,13 +134,26 @@ export function SchemaExplorer() {
   const handleTableClick = (schemaName: string, table: TableInfo) => {
     const connection = getActiveConnection()
     if (!connection) return
-    // Create a new table preview tab (always creates new per user preference)
+
+    // Check if tab already exists for this table - navigate to it instead of creating new
+    const existingTab = findTablePreviewTab(connection.id, schemaName, table.name)
+    if (existingTab) {
+      setActiveTab(existingTab.id)
+      return
+    }
+
+    // Create a new table preview tab
     createTablePreviewTab(connection.id, schemaName, table.name)
   }
 
   const handleRefresh = () => {
     if (!activeConnectionId) return
     fetchSchemas()
+  }
+
+  const handleOpenERD = () => {
+    if (!activeConnectionId) return
+    createERDTab(activeConnectionId)
   }
 
   if (!activeConnectionId) {
@@ -161,20 +203,60 @@ export function SchemaExplorer() {
 
   return (
     <SidebarGroup>
-      <SidebarGroupLabel>
-        Schema
-        <SidebarGroupAction onClick={handleRefresh} title="Refresh schema">
-          <RefreshCw className="size-3.5" />
-        </SidebarGroupAction>
+      <SidebarGroupLabel className="flex items-center justify-between">
+        <span>Schema</span>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-5 p-0 hover:bg-sidebar-accent"
+            onClick={handleOpenERD}
+            title="View ERD diagram"
+          >
+            <Network className="size-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-5 p-0 hover:bg-sidebar-accent"
+            onClick={handleRefresh}
+            title="Refresh schema"
+          >
+            <RefreshCw className="size-3.5" />
+          </Button>
+        </div>
       </SidebarGroupLabel>
       <SidebarGroupContent>
+        {/* Search Input */}
+        <div className="px-2 pb-2">
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Search tables..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-7 pl-7 pr-7 text-xs"
+            />
+            {searchQuery && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-0.5 top-1/2 -translate-y-1/2 size-6 hover:bg-transparent"
+                onClick={() => setSearchQuery('')}
+              >
+                <X className="size-3.5 text-muted-foreground" />
+              </Button>
+            )}
+          </div>
+        </div>
         <SidebarMenu>
-          {schemas.length === 0 ? (
+          {filteredSchemas.length === 0 ? (
             <div className="px-2 py-4 text-xs text-muted-foreground text-center">
-              No schemas found
+              {searchQuery ? 'No tables match your search' : 'No schemas found'}
             </div>
           ) : (
-            schemas.map((schema) => (
+            filteredSchemas.map((schema) => (
               <Collapsible
                 key={schema.name}
                 open={expandedSchemas.has(schema.name)}

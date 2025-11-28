@@ -167,8 +167,8 @@ function SettingsPage() {
                 <ShortcutRow keys={['⌘', 'T']} description="Create new query tab" />
                 <ShortcutRow keys={['⌘', 'W']} description="Close current tab" />
                 <ShortcutRow keys={['⌘', '1-9']} description="Switch to tab by number" />
-                <ShortcutRow keys={['⌘', 'Tab']} description="Switch to next tab" />
-                <ShortcutRow keys={['⌘', 'Shift', 'Tab']} description="Switch to previous tab" />
+                <ShortcutRow keys={['⌘', '⌥', '→']} description="Switch to next tab" />
+                <ShortcutRow keys={['⌘', '⌥', '←']} description="Switch to previous tab" />
               </div>
             </div>
 

@@ -2,7 +2,7 @@
 
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { FileCode, Table2, Pin, X } from 'lucide-react'
+import { FileCode, Table2, Pin, X, Network } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { Tab as TabType } from '@/stores/tab-store'
 import {
@@ -23,6 +23,7 @@ interface TabProps {
   onUnpin: () => void
   onCloseOthers: () => void
   onCloseToRight: () => void
+  onCloseAll: () => void
 }
 
 export function Tab({
@@ -34,7 +35,8 @@ export function Tab({
   onPin,
   onUnpin,
   onCloseOthers,
-  onCloseToRight
+  onCloseToRight,
+  onCloseAll
 }: TabProps) {
   const {
     attributes,
@@ -50,7 +52,7 @@ export function Tab({
     transition
   }
 
-  const Icon = tab.type === 'query' ? FileCode : Table2
+  const Icon = tab.type === 'query' ? FileCode : tab.type === 'erd' ? Network : Table2
 
   return (
     <ContextMenu>
@@ -79,7 +81,7 @@ export function Tab({
           <Icon
             className={cn(
               'size-4 shrink-0',
-              tab.type === 'table-preview' ? 'text-blue-500' : 'text-muted-foreground'
+              tab.type === 'table-preview' ? 'text-blue-500' : tab.type === 'erd' ? 'text-purple-500' : 'text-muted-foreground'
             )}
           />
 
@@ -126,6 +128,7 @@ export function Tab({
         )}
         <ContextMenuItem onClick={onCloseOthers}>Close Other Tabs</ContextMenuItem>
         <ContextMenuItem onClick={onCloseToRight}>Close Tabs to Right</ContextMenuItem>
+        <ContextMenuItem onClick={onCloseAll}>Close All Tabs</ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
   )

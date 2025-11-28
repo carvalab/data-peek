@@ -4,7 +4,7 @@ import type { Connection } from './connection-store'
 import type { QueryResult } from './query-store'
 
 // Tab type discriminator
-export type TabType = 'query' | 'table-preview'
+export type TabType = 'query' | 'table-preview' | 'erd'
 
 // Base tab interface
 interface BaseTab {
@@ -43,7 +43,12 @@ export interface TablePreviewTab extends BaseTab {
   pageSize: number
 }
 
-export type Tab = QueryTab | TablePreviewTab
+// ERD visualization tab
+export interface ERDTab extends BaseTab {
+  type: 'erd'
+}
+
+export type Tab = QueryTab | TablePreviewTab | ERDTab
 
 // Persisted tab data (minimal for storage)
 interface PersistedTab {
@@ -77,6 +82,7 @@ interface TabState {
     column: string,
     value: unknown
   ) => string
+  createERDTab: (connectionId: string) => string
   closeTab: (tabId: string) => void
   closeAllTabs: () => void
   closeOtherTabs: (tabId: string) => void
@@ -114,6 +120,8 @@ interface TabState {
   isTabDirty: (tabId: string) => boolean
   getTabPaginatedRows: (tabId: string) => Record<string, unknown>[]
   getTabTotalPages: (tabId: string) => number
+  findTablePreviewTab: (connectionId: string, schemaName: string, tableName: string) => Tab | undefined
+  findERDTab: (connectionId: string) => Tab | undefined
 }
 
 export const useTabStore = create<TabState>()(
@@ -231,6 +239,38 @@ export const useTabStore = create<TabState>()(
         return id
       },
 
+      createERDTab: (connectionId) => {
+        // Check if ERD tab already exists for this connection
+        const existingTab = get().tabs.find(
+          (t) => t.type === 'erd' && t.connectionId === connectionId
+        )
+        if (existingTab) {
+          set({ activeTabId: existingTab.id })
+          return existingTab.id
+        }
+
+        const id = crypto.randomUUID()
+        const tabs = get().tabs
+        const maxOrder = tabs.length > 0 ? Math.max(...tabs.map((t) => t.order)) : -1
+
+        const newTab: ERDTab = {
+          id,
+          type: 'erd',
+          title: 'ERD Diagram',
+          isPinned: false,
+          connectionId,
+          createdAt: Date.now(),
+          order: maxOrder + 1
+        }
+
+        set((state) => ({
+          tabs: [...state.tabs, newTab],
+          activeTabId: id
+        }))
+
+        return id
+      },
+
       closeTab: (tabId) => {
         const tab = get().tabs.find((t) => t.id === tabId)
         if (!tab || tab.isPinned) return
@@ -319,7 +359,7 @@ export const useTabStore = create<TabState>()(
       markTabSaved: (tabId) => {
         set((state) => ({
           tabs: state.tabs.map((t) =>
-            t.id === tabId ? { ...t, savedQuery: t.query } : t
+            t.id === tabId && t.type !== 'erd' ? { ...t, savedQuery: t.query } : t
           )
         }))
       },
@@ -405,20 +445,40 @@ export const useTabStore = create<TabState>()(
       isTabDirty: (tabId) => {
         const tab = get().tabs.find((t) => t.id === tabId)
         if (!tab) return false
+        // ERD tabs are never dirty
+        if (tab.type === 'erd') return false
         return tab.query !== tab.savedQuery
       },
 
       getTabPaginatedRows: (tabId) => {
         const tab = get().tabs.find((t) => t.id === tabId)
-        if (!tab || !tab.result) return []
+        if (!tab || tab.type === 'erd') return []
+        if (!tab.result) return []
         const start = (tab.currentPage - 1) * tab.pageSize
         return tab.result.rows.slice(start, start + tab.pageSize)
       },
 
       getTabTotalPages: (tabId) => {
         const tab = get().tabs.find((t) => t.id === tabId)
-        if (!tab || !tab.result) return 0
+        if (!tab || tab.type === 'erd') return 0
+        if (!tab.result) return 0
         return Math.ceil(tab.result.rowCount / tab.pageSize)
+      },
+
+      findTablePreviewTab: (connectionId, schemaName, tableName) => {
+        return get().tabs.find(
+          (t) =>
+            t.type === 'table-preview' &&
+            t.connectionId === connectionId &&
+            (t as TablePreviewTab).schemaName === schemaName &&
+            (t as TablePreviewTab).tableName === tableName
+        )
+      },
+
+      findERDTab: (connectionId) => {
+        return get().tabs.find(
+          (t) => t.type === 'erd' && t.connectionId === connectionId
+        )
       }
     }),
     {
@@ -436,7 +496,7 @@ export const useTabStore = create<TabState>()(
               isPinned: t.isPinned,
               connectionId: t.connectionId,
               order: t.order,
-              query: t.query,
+              query: t.type !== 'erd' ? t.query : undefined,
               schemaName: t.type === 'table-preview' ? t.schemaName : undefined,
               tableName: t.type === 'table-preview' ? t.tableName : undefined
             })
@@ -447,12 +507,21 @@ export const useTabStore = create<TabState>()(
         // Restore pinned tabs with full state on app load
         if (state) {
           state.tabs = state.tabs.map((t) => {
+            // ERD tabs just need basic properties
+            if (t.type === 'erd') {
+              return {
+                ...t,
+                type: 'erd' as const,
+                createdAt: Date.now()
+              }
+            }
+
             const base = {
               ...t,
               result: null,
               error: null,
               isExecuting: false,
-              savedQuery: t.query ?? '',
+              savedQuery: (t as unknown as { query?: string }).query ?? '',
               createdAt: Date.now(),
               currentPage: 1,
               pageSize: 100
