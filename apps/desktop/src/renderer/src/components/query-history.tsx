@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { Clock, Copy, MoreHorizontal, Play, Trash2 } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
@@ -28,6 +29,7 @@ import {
   TooltipTrigger
 } from '@/components/ui/tooltip'
 import { useQueryStore, useConnectionStore } from '@/stores'
+import { QueryHistoryDialog } from './query-history-dialog'
 
 function formatRelativeTime(date: Date): string {
   const now = new Date()
@@ -87,6 +89,7 @@ export function QueryHistory() {
   const clearHistory = useQueryStore((s) => s.clearHistory)
   const removeFromHistory = useQueryStore((s) => s.removeFromHistory)
   const activeConnectionId = useConnectionStore((s) => s.activeConnectionId)
+  const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false)
 
   // Filter history by active connection
   const filteredHistory = activeConnectionId
@@ -193,7 +196,10 @@ export function QueryHistory() {
           )}
           {filteredHistory.length > 10 && (
             <SidebarMenuItem>
-              <SidebarMenuButton className="text-sidebar-foreground/70">
+              <SidebarMenuButton
+                className="text-sidebar-foreground/70"
+                onClick={() => setIsHistoryDialogOpen(true)}
+              >
                 <MoreHorizontal />
                 <span>View all history ({filteredHistory.length})</span>
               </SidebarMenuButton>
@@ -201,6 +207,8 @@ export function QueryHistory() {
           )}
         </SidebarMenu>
       </SidebarGroupContent>
+
+      <QueryHistoryDialog open={isHistoryDialogOpen} onOpenChange={setIsHistoryDialogOpen} />
     </SidebarGroup>
   )
 }

@@ -10,6 +10,7 @@ export interface Connection {
   user: string
   password?: string
   ssl?: boolean
+  group?: string
 }
 
 export interface ConnectionWithStatus extends Connection {

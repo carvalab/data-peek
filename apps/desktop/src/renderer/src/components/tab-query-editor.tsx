@@ -12,7 +12,8 @@ import {
   Wand2,
   PanelTopClose,
   PanelTop,
-  DatabaseZap
+  DatabaseZap,
+  BarChart3
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -36,10 +37,12 @@ import {
 import type { EditContext } from '@data-peek/shared'
 import { SQLEditor } from '@/components/sql-editor'
 import { formatSQL } from '@/lib/sql-formatter'
+import { downloadCSV, downloadJSON, generateExportFilename } from '@/lib/export'
 import type { QueryResult as IpcQueryResult, ForeignKeyInfo, ColumnInfo } from '@data-peek/shared'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { FKPanelStack, type FKPanelItem } from '@/components/fk-panel-stack'
 import { ERDVisualization } from '@/components/erd-visualization'
+import { ExecutionPlanViewer } from '@/components/execution-plan-viewer'
 
 interface TabQueryEditorProps {
   tabId: string
@@ -61,6 +64,29 @@ export function TabQueryEditor({ tabId }: TabQueryEditorProps) {
   const tabConnection = tab?.connectionId
     ? connections.find((c) => c.id === tab.connectionId)
     : null
+
+  // Track if we've already attempted auto-run for this tab
+  const hasAutoRun = useRef(false)
+
+  // Collapse state for query editor
+  const [isEditorCollapsed, setIsEditorCollapsed] = useState(false)
+
+  // Track client-side filters and sorting for "Apply to Query"
+  const [tableFilters, setTableFilters] = useState<DataTableFilter[]>([])
+  const [tableSorting, setTableSorting] = useState<DataTableSort[]>([])
+
+  // FK Panel stack state
+  const [fkPanels, setFkPanels] = useState<FKPanelItem[]>([])
+
+  // Execution plan state
+  const [executionPlan, setExecutionPlan] = useState<{
+    plan: unknown[]
+    durationMs: number
+  } | null>(null)
+  const [isExplaining, setIsExplaining] = useState(false)
+
+  // Get the createForeignKeyTab action
+  const createForeignKeyTab = useTabStore((s) => s.createForeignKeyTab)
 
   const handleRunQuery = useCallback(async () => {
     if (!tab || tab.type === 'erd' || !tabConnection || tab.isExecuting || !tab.query.trim()) {
@@ -123,25 +149,37 @@ export function TabQueryEditor({ tabId }: TabQueryEditorProps) {
     updateTabQuery(tabId, formatted)
   }
 
+  const handleExplainQuery = useCallback(async () => {
+    if (!tab || tab.type === 'erd' || !tabConnection || isExplaining || !tab.query.trim()) {
+      return
+    }
+
+    setIsExplaining(true)
+    setExecutionPlan(null)
+
+    try {
+      const response = await window.api.db.explain(tabConnection, tab.query, true)
+
+      if (response.success && response.data) {
+        setExecutionPlan({
+          plan: response.data.plan as unknown[],
+          durationMs: response.data.durationMs
+        })
+      } else {
+        // Show error in the existing error display
+        updateTabResult(tabId, null, response.error ?? 'Failed to get execution plan')
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      updateTabResult(tabId, null, errorMessage)
+    } finally {
+      setIsExplaining(false)
+    }
+  }, [tab, tabConnection, tabId, isExplaining, updateTabResult])
+
   const handleQueryChange = (value: string) => {
     updateTabQuery(tabId, value)
   }
-
-  // Track if we've already attempted auto-run for this tab
-  const hasAutoRun = useRef(false)
-
-  // Collapse state for query editor
-  const [isEditorCollapsed, setIsEditorCollapsed] = useState(false)
-
-  // Track client-side filters and sorting for "Apply to Query"
-  const [tableFilters, setTableFilters] = useState<DataTableFilter[]>([])
-  const [tableSorting, setTableSorting] = useState<DataTableSort[]>([])
-
-  // FK Panel stack state
-  const [fkPanels, setFkPanels] = useState<FKPanelItem[]>([])
-
-  // Get the createForeignKeyTab action
-  const createForeignKeyTab = useTabStore((s) => s.createForeignKeyTab)
 
   // Helper: Look up column info from schema (for FK details)
   const getColumnsWithFKInfo = useCallback((): DataTableColumn[] => {
@@ -186,7 +224,8 @@ export function TabQueryEditor({ tabId }: TabQueryEditorProps) {
 
   // Helper: Get columns with full info including isPrimaryKey (for editable table)
   const getColumnsForEditing = useCallback((): EditableDataTableColumn[] => {
-    if (!tab || tab.type === 'erd' || !tab.result?.columns || tab.type !== 'table-preview') return []
+    if (!tab || tab.type === 'erd' || !tab.result?.columns || tab.type !== 'table-preview')
+      return []
 
     const schema = schemas.find((s) => s.name === tab.schemaName)
     const tableInfo = schema?.tables.find((t) => t.name === tab.tableName)
@@ -525,6 +564,29 @@ export function TabQueryEditor({ tabId }: TabQueryEditorProps) {
                 ⌘↵
               </kbd>
             </Button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1.5 h-7"
+                    disabled={tab.isExecuting || isExplaining || !tab.query.trim()}
+                    onClick={handleExplainQuery}
+                  >
+                    {isExplaining ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <BarChart3 className="size-3.5" />
+                    )}
+                    Explain
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <p className="text-xs">Analyze query execution plan (EXPLAIN ANALYZE)</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             {!isEditorCollapsed && (
               <Button
                 variant="ghost"
@@ -641,11 +703,27 @@ export function TabQueryEditor({ tabId }: TabQueryEditorProps) {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => {
+                        if (!tab.result) return
+                        const filename = generateExportFilename(
+                          tab.type === 'table-preview' ? tab.tableName : undefined
+                        )
+                        downloadCSV(tab.result, filename)
+                      }}
+                    >
                       <FileSpreadsheet className="size-4 text-muted-foreground" />
                       Export as CSV
                     </DropdownMenuItem>
-                    <DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => {
+                        if (!tab.result) return
+                        const filename = generateExportFilename(
+                          tab.type === 'table-preview' ? tab.tableName : undefined
+                        )
+                        downloadJSON(tab.result, filename)
+                      }}
+                    >
                       <FileJson className="size-4 text-muted-foreground" />
                       Export as JSON
                     </DropdownMenuItem>
@@ -673,6 +751,17 @@ export function TabQueryEditor({ tabId }: TabQueryEditorProps) {
         onDrillDown={handleFKDrillDown}
         onOpenInTab={handleFKOpenTab}
       />
+
+      {/* Execution Plan Panel */}
+      {executionPlan && (
+        <div className="fixed inset-y-0 right-0 w-[500px] z-50 shadow-xl">
+          <ExecutionPlanViewer
+            plan={executionPlan.plan as Parameters<typeof ExecutionPlanViewer>[0]['plan']}
+            durationMs={executionPlan.durationMs}
+            onClose={() => setExecutionPlan(null)}
+          />
+        </div>
+      )}
     </div>
   )
 }

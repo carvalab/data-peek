@@ -1,4 +1,5 @@
 import { createRouter, createRootRoute, createRoute, Outlet, Link } from '@tanstack/react-router'
+import { useState, useEffect, useCallback } from 'react'
 import { Moon, Sun, Monitor } from 'lucide-react'
 import { ThemeProvider, useTheme } from '@/components/theme-provider'
 import { AppSidebar } from '@/components/app-sidebar'
@@ -6,12 +7,56 @@ import { NavActions } from '@/components/nav-actions'
 import { Separator } from '@/components/ui/separator'
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
 import { TabContainer } from '@/components/tab-container'
+import { ConnectionPicker } from '@/components/connection-picker'
 import { useConnectionStore } from '@/stores'
 import { cn } from '@/lib/utils'
 
 // Root Layout
 function RootLayout() {
   const activeConnection = useConnectionStore((s) => s.getActiveConnection())
+  const connections = useConnectionStore((s) => s.connections)
+  const setActiveConnection = useConnectionStore((s) => s.setActiveConnection)
+  const setConnectionStatus = useConnectionStore((s) => s.setConnectionStatus)
+  const [isConnectionPickerOpen, setIsConnectionPickerOpen] = useState(false)
+
+  // Handle connection switching
+  const handleSelectConnection = useCallback(
+    (connectionId: string) => {
+      setConnectionStatus(connectionId, { isConnecting: true, error: undefined })
+      setTimeout(() => {
+        setConnectionStatus(connectionId, { isConnecting: false, isConnected: true })
+        setActiveConnection(connectionId)
+      }, 500)
+    },
+    [setConnectionStatus, setActiveConnection]
+  )
+
+  // Global keyboard shortcuts for connections
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isMeta = e.metaKey || e.ctrlKey
+
+      // Cmd+P: Open connection picker
+      if (isMeta && e.key === 'p' && !e.shiftKey) {
+        e.preventDefault()
+        setIsConnectionPickerOpen(true)
+        return
+      }
+
+      // Cmd+Shift+1-9: Switch to connection N
+      if (isMeta && e.shiftKey && e.key >= '1' && e.key <= '9') {
+        e.preventDefault()
+        const connectionIndex = parseInt(e.key) - 1
+        if (connections[connectionIndex]) {
+          handleSelectConnection(connections[connectionIndex].id)
+        }
+        return
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [connections, handleSelectConnection])
 
   return (
     <ThemeProvider defaultTheme="dark" storageKey="data-peek-theme">
@@ -46,6 +91,12 @@ function RootLayout() {
           <Outlet />
         </SidebarInset>
       </SidebarProvider>
+
+      {/* Global Connection Picker */}
+      <ConnectionPicker
+        open={isConnectionPickerOpen}
+        onOpenChange={setIsConnectionPickerOpen}
+      />
     </ThemeProvider>
   )
 }
@@ -169,6 +220,15 @@ function SettingsPage() {
                 <ShortcutRow keys={['⌘', '1-9']} description="Switch to tab by number" />
                 <ShortcutRow keys={['⌘', '⌥', '→']} description="Switch to next tab" />
                 <ShortcutRow keys={['⌘', '⌥', '←']} description="Switch to previous tab" />
+              </div>
+            </div>
+
+            {/* Connections */}
+            <div>
+              <h3 className="text-sm font-semibold text-foreground mb-2">Connections</h3>
+              <div className="space-y-1">
+                <ShortcutRow keys={['⌘', 'P']} description="Open connection picker" />
+                <ShortcutRow keys={['⌘', '⇧', '1-9']} description="Switch to connection by number" />
               </div>
             </div>
 

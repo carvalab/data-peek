@@ -517,6 +517,46 @@ app.whenReady().then(async () => {
     }
   })
 
+  // Execute EXPLAIN ANALYZE for query plan analysis
+  ipcMain.handle('db:explain', async (_, { config, query, analyze }) => {
+    console.log('[main:db:explain] Received explain request')
+    console.log('[main:db:explain] Query:', query)
+    console.log('[main:db:explain] Analyze:', analyze)
+
+    try {
+      const client = new Client(config)
+      await client.connect()
+
+      // Build EXPLAIN query with JSON format for easy parsing
+      const explainOptions = analyze
+        ? 'ANALYZE, COSTS, VERBOSE, BUFFERS, FORMAT JSON'
+        : 'COSTS, VERBOSE, FORMAT JSON'
+      const explainQuery = `EXPLAIN (${explainOptions}) ${query}`
+
+      console.log('[main:db:explain] Running:', explainQuery)
+      const start = Date.now()
+      const res = await client.query(explainQuery)
+      const duration = Date.now() - start
+
+      await client.end()
+
+      // EXPLAIN with JSON format returns a single row with "QUERY PLAN" column containing JSON array
+      const planJson = res.rows[0]?.['QUERY PLAN']
+
+      return {
+        success: true,
+        data: {
+          plan: planJson,
+          durationMs: duration
+        }
+      }
+    } catch (error: unknown) {
+      console.error('[main:db:explain] Error:', error)
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      return { success: false, error: errorMessage }
+    }
+  })
+
   createWindow()
 
   app.on('activate', function () {

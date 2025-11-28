@@ -137,7 +137,7 @@ export function ConnectionSwitcher() {
                     {connection.host}:{connection.port}/{connection.database}
                   </span>
                 </div>
-                <DropdownMenuShortcut>⌘{index + 1}</DropdownMenuShortcut>
+                {index < 9 && <DropdownMenuShortcut>⌘⇧{index + 1}</DropdownMenuShortcut>}
               </DropdownMenuItem>
             ))}
             <DropdownMenuSeparator />

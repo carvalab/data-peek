@@ -26,7 +26,9 @@ const api = {
     execute: (config: ConnectionConfig, batch: EditBatch): Promise<IpcResponse<EditResult>> =>
       ipcRenderer.invoke('db:execute', { config, batch }),
     previewSql: (batch: EditBatch): Promise<IpcResponse<Array<{ operationId: string; sql: string }>>> =>
-      ipcRenderer.invoke('db:preview-sql', { batch })
+      ipcRenderer.invoke('db:preview-sql', { batch }),
+    explain: (config: ConnectionConfig, query: string, analyze: boolean): Promise<IpcResponse<{ plan: unknown; durationMs: number }>> =>
+      ipcRenderer.invoke('db:explain', { config, query, analyze })
   }
 }
 

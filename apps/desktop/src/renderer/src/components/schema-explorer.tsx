@@ -185,11 +185,17 @@ export function SchemaExplorer() {
   if (schemaError) {
     return (
       <SidebarGroup>
-        <SidebarGroupLabel>
-          Schema
-          <SidebarGroupAction onClick={handleRefresh} title="Retry">
+        <SidebarGroupLabel className="flex items-center justify-between">
+          <span>Schema</span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-5 p-0 hover:bg-sidebar-accent"
+            onClick={handleRefresh}
+            title="Retry"
+          >
             <RefreshCw className="size-3.5" />
-          </SidebarGroupAction>
+          </Button>
         </SidebarGroupLabel>
         <SidebarGroupContent>
           <div className="px-2 py-4 text-xs text-destructive text-center">
