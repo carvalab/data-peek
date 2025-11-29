@@ -9,7 +9,10 @@ import type {
   AlterTableBatch,
   DDLResult,
   SequenceInfo,
-  CustomTypeInfo
+  CustomTypeInfo,
+  LicenseStatus,
+  LicenseActivationRequest,
+  LicenseType
 } from '@shared/index'
 
 interface DataPeekApi {
@@ -63,6 +66,17 @@ interface DataPeekApi {
     onExecuteQuery: (callback: () => void) => () => void
     onFormatSql: (callback: () => void) => () => void
     onClearResults: (callback: () => void) => () => void
+  }
+  license: {
+    check: () => Promise<IpcResponse<LicenseStatus>>
+    activate: (request: LicenseActivationRequest) => Promise<IpcResponse<LicenseStatus>>
+    deactivate: () => Promise<IpcResponse<void>>
+    activateOffline: (
+      key: string,
+      email: string,
+      type?: LicenseType,
+      daysValid?: number
+    ) => Promise<IpcResponse<LicenseStatus>>
   }
 }
 

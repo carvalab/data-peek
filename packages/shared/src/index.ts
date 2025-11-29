@@ -540,3 +540,87 @@ export interface CustomTypeInfo {
   /** Enum values (for enum types) */
   values?: string[];
 }
+
+// ============================================
+// License Types
+// ============================================
+
+/**
+ * License type enumeration
+ */
+export type LicenseType = 'personal' | 'individual' | 'team';
+
+/**
+ * Stored license data (encrypted locally)
+ */
+export interface LicenseData {
+  /** License key */
+  key: string;
+  /** Type of license */
+  type: LicenseType;
+  /** Email address of license owner */
+  email: string;
+  /** Subscription expiry date (ISO string) */
+  expiresAt: string;
+  /** Last version the user is entitled to use perpetually */
+  perpetualVersion: string;
+  /** When this license was activated (ISO string) */
+  activatedAt: string;
+  /** Last time the license was validated online (ISO string) */
+  lastValidated: string;
+}
+
+/**
+ * License status returned to the frontend
+ */
+export interface LicenseStatus {
+  /** Whether the license is valid */
+  isValid: boolean;
+  /** Whether commercial use is allowed */
+  isCommercial: boolean;
+  /** Type of license */
+  type: LicenseType;
+  /** Expiry date (null for personal) */
+  expiresAt: string | null;
+  /** Days until expiry (null for personal or expired) */
+  daysUntilExpiry: number | null;
+  /** Perpetual version the user can use after expiry */
+  perpetualVersion: string | null;
+  /** Whether revalidation is needed */
+  needsRevalidation: boolean;
+  /** Email associated with the license */
+  email?: string;
+  /** Number of devices activated */
+  devicesUsed?: number;
+  /** Maximum devices allowed */
+  devicesAllowed?: number;
+}
+
+/**
+ * License activation request
+ */
+export interface LicenseActivationRequest {
+  key: string;
+  email: string;
+}
+
+/**
+ * License activation response
+ */
+export interface LicenseActivationResponse {
+  success: boolean;
+  error?: string;
+  type?: LicenseType;
+  expiresAt?: string;
+  perpetualVersion?: string;
+  devicesUsed?: number;
+  devicesAllowed?: number;
+}
+
+/**
+ * License deactivation response
+ */
+export interface LicenseDeactivationResponse {
+  success: boolean;
+  error?: string;
+}

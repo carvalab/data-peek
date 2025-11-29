@@ -22,6 +22,14 @@ import { createMenu } from './menu'
 import { setupContextMenu } from './context-menu'
 import { getWindowState, trackWindowState } from './window-state'
 import { getAdapter } from './db-adapter'
+import {
+  initLicenseStore,
+  checkLicense,
+  activateLicense,
+  deactivateLicense,
+  activateLicenseOffline
+} from './license-service'
+import type { LicenseActivationRequest } from '@shared/index'
 
 // electron-store v11 is ESM-only, use dynamic import
 type StoreType = import('electron-store').default<{ connections: ConnectionConfig[] }>
@@ -122,6 +130,9 @@ async function createWindow(): Promise<void> {
 app.whenReady().then(async () => {
   // Initialize electron-store (ESM module)
   await initStore()
+
+  // Initialize license store
+  await initLicenseStore()
 
   // Create native application menu
   createMenu()
@@ -537,6 +548,77 @@ app.whenReady().then(async () => {
       return { success: false, error: errorMessage }
     }
   })
+
+  // ============================================
+  // License Handlers
+  // ============================================
+
+  // Check current license status
+  ipcMain.handle('license:check', async () => {
+    try {
+      const status = await checkLicense()
+      return { success: true, data: status }
+    } catch (error: unknown) {
+      console.error('[main:license:check] Error:', error)
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      return { success: false, error: errorMessage }
+    }
+  })
+
+  // Activate a license
+  ipcMain.handle('license:activate', async (_, request: LicenseActivationRequest) => {
+    console.log('[main:license:activate] Activating license for:', request.email)
+    try {
+      const result = await activateLicense(request.key, request.email)
+      if (result.success) {
+        const status = await checkLicense()
+        return { success: true, data: status }
+      }
+      return { success: false, error: result.error }
+    } catch (error: unknown) {
+      console.error('[main:license:activate] Error:', error)
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      return { success: false, error: errorMessage }
+    }
+  })
+
+  // Deactivate the current license
+  ipcMain.handle('license:deactivate', async () => {
+    console.log('[main:license:deactivate] Deactivating license')
+    try {
+      const result = await deactivateLicense()
+      return { success: result.success, error: result.error }
+    } catch (error: unknown) {
+      console.error('[main:license:deactivate] Error:', error)
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      return { success: false, error: errorMessage }
+    }
+  })
+
+  // Offline activation (for development/testing)
+  ipcMain.handle(
+    'license:activate-offline',
+    async (
+      _,
+      {
+        key,
+        email,
+        type,
+        daysValid
+      }: { key: string; email: string; type?: 'individual' | 'team'; daysValid?: number }
+    ) => {
+      console.log('[main:license:activate-offline] Offline activation for:', email)
+      try {
+        activateLicenseOffline(key, email, type, daysValid)
+        const status = await checkLicense()
+        return { success: true, data: status }
+      } catch (error: unknown) {
+        console.error('[main:license:activate-offline] Error:', error)
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        return { success: false, error: errorMessage }
+      }
+    }
+  )
 
   await createWindow()
 

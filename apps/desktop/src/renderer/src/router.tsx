@@ -15,7 +15,10 @@ import { Separator } from '@/components/ui/separator'
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
 import { TabContainer } from '@/components/tab-container'
 import { ConnectionPicker } from '@/components/connection-picker'
-import { useConnectionStore } from '@/stores'
+import { LicenseStatusIndicator } from '@/components/license-status-indicator'
+import { LicenseActivationModal } from '@/components/license-activation-modal'
+import { LicenseSettingsModal } from '@/components/license-settings-modal'
+import { useConnectionStore, useLicenseStore } from '@/stores'
 import { cn } from '@/lib/utils'
 
 // Root Layout
@@ -25,6 +28,12 @@ function RootLayout() {
   const setActiveConnection = useConnectionStore((s) => s.setActiveConnection)
   const setConnectionStatus = useConnectionStore((s) => s.setConnectionStatus)
   const [isConnectionPickerOpen, setIsConnectionPickerOpen] = useState(false)
+
+  // License modal states from store
+  const isActivationModalOpen = useLicenseStore((s) => s.isActivationModalOpen)
+  const closeActivationModal = useLicenseStore((s) => s.closeActivationModal)
+  const isSettingsModalOpen = useLicenseStore((s) => s.isSettingsModalOpen)
+  const closeSettingsModal = useLicenseStore((s) => s.closeSettingsModal)
 
   // Handle connection switching
   const handleSelectConnection = useCallback(
@@ -90,7 +99,9 @@ function RootLayout() {
                 </>
               )}
             </div>
-            <div className="titlebar-no-drag ml-auto px-3">
+            <div className="titlebar-no-drag ml-auto flex items-center gap-2 px-3">
+              <LicenseStatusIndicator />
+              <Separator orientation="vertical" className="data-[orientation=vertical]:h-4" />
               <NavActions />
             </div>
           </header>
@@ -101,6 +112,10 @@ function RootLayout() {
 
       {/* Global Connection Picker */}
       <ConnectionPicker open={isConnectionPickerOpen} onOpenChange={setIsConnectionPickerOpen} />
+
+      {/* License Modals */}
+      <LicenseActivationModal open={isActivationModalOpen} onOpenChange={closeActivationModal} />
+      <LicenseSettingsModal open={isSettingsModalOpen} onOpenChange={closeSettingsModal} />
     </ThemeProvider>
   )
 }
@@ -166,6 +181,9 @@ function ShortcutRow({ keys, description }: { keys: string[]; description: strin
 // Settings Page
 function SettingsPage() {
   const { theme, setTheme } = useTheme()
+  const licenseStatus = useLicenseStore((s) => s.status)
+  const openSettingsModal = useLicenseStore((s) => s.openSettingsModal)
+  const openActivationModal = useLicenseStore((s) => s.openActivationModal)
 
   return (
     <div className="flex flex-1 flex-col p-6 overflow-auto">
@@ -176,6 +194,46 @@ function SettingsPage() {
         <h1 className="text-2xl font-semibold">Settings</h1>
       </div>
       <div className="space-y-6 max-w-2xl">
+        {/* License */}
+        <div className="rounded-lg border border-border/50 bg-card p-4">
+          <h2 className="text-lg font-medium mb-2">License</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            Manage your data-peek license for commercial use.
+          </p>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              {licenseStatus?.type === 'personal' ? (
+                <>
+                  <span className="size-2 rounded-full bg-muted-foreground" />
+                  <span className="text-sm">Personal Use (Free)</span>
+                </>
+              ) : (
+                <>
+                  <span
+                    className={`size-2 rounded-full ${
+                      licenseStatus?.daysUntilExpiry && licenseStatus.daysUntilExpiry <= 0
+                        ? 'bg-amber-500'
+                        : 'bg-green-500'
+                    }`}
+                  />
+                  <span className="text-sm capitalize">
+                    {licenseStatus?.type} License
+                    {licenseStatus?.email && ` (${licenseStatus.email})`}
+                  </span>
+                </>
+              )}
+            </div>
+            <button
+              onClick={() =>
+                licenseStatus?.type === 'personal' ? openActivationModal() : openSettingsModal()
+              }
+              className="text-sm text-primary hover:underline"
+            >
+              {licenseStatus?.type === 'personal' ? 'Activate License' : 'Manage License'}
+            </button>
+          </div>
+        </div>
+
         {/* Appearance */}
         <div className="rounded-lg border border-border/50 bg-card p-4">
           <h2 className="text-lg font-medium mb-2">Appearance</h2>

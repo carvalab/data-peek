@@ -10,7 +10,10 @@ import type {
   AlterTableBatch,
   DDLResult,
   SequenceInfo,
-  CustomTypeInfo
+  CustomTypeInfo,
+  LicenseStatus,
+  LicenseActivationRequest,
+  LicenseType
 } from '@shared/index'
 
 // Custom APIs for renderer
@@ -104,6 +107,20 @@ const api = {
       ipcRenderer.on('menu:clear-results', handler)
       return () => ipcRenderer.removeListener('menu:clear-results', handler)
     }
+  },
+  // License management
+  license: {
+    check: (): Promise<IpcResponse<LicenseStatus>> => ipcRenderer.invoke('license:check'),
+    activate: (request: LicenseActivationRequest): Promise<IpcResponse<LicenseStatus>> =>
+      ipcRenderer.invoke('license:activate', request),
+    deactivate: (): Promise<IpcResponse<void>> => ipcRenderer.invoke('license:deactivate'),
+    activateOffline: (
+      key: string,
+      email: string,
+      type?: LicenseType,
+      daysValid?: number
+    ): Promise<IpcResponse<LicenseStatus>> =>
+      ipcRenderer.invoke('license:activate-offline', { key, email, type, daysValid })
   }
 }
 
