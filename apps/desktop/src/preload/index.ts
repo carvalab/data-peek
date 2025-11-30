@@ -14,8 +14,25 @@ import type {
   LicenseStatus,
   LicenseActivationRequest,
   LicenseType,
-  SavedQuery
+  SavedQuery,
+  SchemaInfo,
+  AIProvider,
+  AIConfig,
+  AIMessage,
+  AIChatResponse,
+  StoredChatMessage,
+  ChatSession
 } from '@shared/index'
+
+// Re-export AI types for renderer consumers
+export type {
+  AIProvider,
+  AIConfig,
+  AIMessage,
+  AIChatResponse,
+  StoredChatMessage,
+  ChatSession
+}
 
 // Custom APIs for renderer
 const api = {
@@ -143,6 +160,49 @@ const api = {
       ipcRenderer.on('open-saved-queries', handler)
       return () => ipcRenderer.removeListener('open-saved-queries', handler)
     }
+  },
+  // AI Assistant
+  ai: {
+    getConfig: (): Promise<IpcResponse<AIConfig | null>> => ipcRenderer.invoke('ai:get-config'),
+    setConfig: (config: AIConfig): Promise<IpcResponse<void>> =>
+      ipcRenderer.invoke('ai:set-config', config),
+    clearConfig: (): Promise<IpcResponse<void>> => ipcRenderer.invoke('ai:clear-config'),
+    validateKey: (config: AIConfig): Promise<IpcResponse<{ valid: boolean; error?: string }>> =>
+      ipcRenderer.invoke('ai:validate-key', config),
+    chat: (
+      messages: AIMessage[],
+      schemas: SchemaInfo[],
+      dbType: string
+    ): Promise<IpcResponse<AIChatResponse>> =>
+      ipcRenderer.invoke('ai:chat', { messages, schemas, dbType }),
+    // Chat history persistence (legacy API)
+    getChatHistory: (connectionId: string): Promise<IpcResponse<StoredChatMessage[]>> =>
+      ipcRenderer.invoke('ai:get-chat-history', connectionId),
+    saveChatHistory: (
+      connectionId: string,
+      messages: StoredChatMessage[]
+    ): Promise<IpcResponse<void>> =>
+      ipcRenderer.invoke('ai:save-chat-history', { connectionId, messages }),
+    clearChatHistory: (connectionId: string): Promise<IpcResponse<void>> =>
+      ipcRenderer.invoke('ai:clear-chat-history', connectionId),
+    // Session-based API (new)
+    getSessions: (connectionId: string): Promise<IpcResponse<ChatSession[]>> =>
+      ipcRenderer.invoke('ai:get-sessions', connectionId),
+    getSession: (
+      connectionId: string,
+      sessionId: string
+    ): Promise<IpcResponse<ChatSession | null>> =>
+      ipcRenderer.invoke('ai:get-session', { connectionId, sessionId }),
+    createSession: (connectionId: string, title?: string): Promise<IpcResponse<ChatSession>> =>
+      ipcRenderer.invoke('ai:create-session', { connectionId, title }),
+    updateSession: (
+      connectionId: string,
+      sessionId: string,
+      updates: { messages?: StoredChatMessage[]; title?: string }
+    ): Promise<IpcResponse<ChatSession | null>> =>
+      ipcRenderer.invoke('ai:update-session', { connectionId, sessionId, updates }),
+    deleteSession: (connectionId: string, sessionId: string): Promise<IpcResponse<boolean>> =>
+      ipcRenderer.invoke('ai:delete-session', { connectionId, sessionId })
   }
 }
 
