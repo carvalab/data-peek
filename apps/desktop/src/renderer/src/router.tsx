@@ -73,8 +73,10 @@ function LayoutContent() {
   const isAISettingsOpen = useAIStore((s) => s.isSettingsOpen)
   const openAISettings = useAIStore((s) => s.openSettings)
   const closeAISettings = useAIStore((s) => s.closeSettings)
-  const isAIConfigured = useAIStore((s) => s.isConfigured)
+  const aiConfig = useAIStore((s) => s.config)
   const multiProviderConfig = useAIStore((s) => s.multiProviderConfig)
+  const isAIConfigured = useAIStore((s) => s.isConfigured)
+  const setMultiProviderConfig = useAIStore((s) => s.setMultiProviderConfig)
   const setProviderConfig = useAIStore((s) => s.setProviderConfig)
   const removeProviderConfig = useAIStore((s) => s.removeProviderConfig)
   const setActiveProvider = useAIStore((s) => s.setActiveProvider)
@@ -96,6 +98,11 @@ function LayoutContent() {
     },
     [activeConnection, createQueryTab, setActiveTab]
   )
+
+  // Load AI config from main process on mount
+  useEffect(() => {
+    loadConfigFromMain()
+  }, [loadConfigFromMain])
 
   // Handle connection switching
   const handleSelectConnection = useCallback(
@@ -270,11 +277,6 @@ function LayoutContent() {
     setTheme,
     toggleSidebar
   ])
-
-  // Load AI config from main process on mount
-  useEffect(() => {
-    loadConfigFromMain()
-  }, [loadConfigFromMain])
 
   // Global keyboard shortcuts
   useEffect(() => {

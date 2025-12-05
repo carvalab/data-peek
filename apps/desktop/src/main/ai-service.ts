@@ -22,6 +22,7 @@ import type {
   AIMultiProviderConfig,
   AIProviderConfig
 } from '@shared/index'
+import { DEFAULT_MODELS } from '@shared/index'
 
 // Re-export types for main process consumers
 export type {
@@ -35,70 +36,44 @@ export type {
   AIProviderConfig
 }
 
+// Zod schema for structured output
+// Using flat object instead of discriminatedUnion for Anthropic/OpenAI tool compatibility
+// (discriminatedUnion produces anyOf without root type:object which providers reject)
+// Using .nullish() instead of .nullable() to accept undefined when fields are missing
 const responseSchema = z.object({
-  type: z.enum(['query', 'chart', 'metric', 'schema', 'message']).describe('The type of response'),
-  message: z.string().describe('A brief explanation or response message'),
-
-  // Query-specific fields (null when not applicable)
-  sql: z
-    .string()
-    .nullable()
-    .describe('The complete, valid SQL query (null if not a query/chart/metric)'),
-  explanation: z
-    .string()
-    .nullable()
-    .describe('Detailed explanation of the query (null if not a query)'),
-  warning: z
-    .string()
-    .nullable()
-    .describe('Warning for mutations or potential issues (null if none)'),
+  type: z.enum(['query', 'chart', 'metric', 'schema', 'message']).describe('Response type'),
+  message: z.string().describe('Brief explanation or response message'),
+  // Query fields (null/undefined when type is not query)
+  sql: z.string().nullish().describe('SQL query - for query/chart/metric types'),
+  explanation: z.string().nullish().describe('Detailed explanation - for query type'),
+  warning: z.string().nullish().describe('Warning for mutations - for query type'),
   requiresConfirmation: z
     .boolean()
-    .nullable()
-    .describe(
-      'True for UPDATE, DELETE, DROP, TRUNCATE, or other destructive queries (null otherwise)'
-    ),
-
-  // Chart-specific fields (null when not applicable)
-  title: z.string().nullable().describe('Chart title (null if not a chart)'),
-  description: z.string().nullable().describe('Chart description (null if not a chart)'),
+    .nullish()
+    .describe('True for destructive queries - for query type'),
+  // Chart fields (null/undefined when type is not chart)
+  title: z.string().nullish().describe('Chart title - for chart type'),
+  description: z.string().nullish().describe('Chart description - for chart type'),
   chartType: z
     .enum(['bar', 'line', 'pie', 'area'])
-    .nullable()
-    .describe('Chart type based on data nature (null if not a chart)'),
-  xKey: z.string().nullable().describe('Column name for X-axis (null if not a chart)'),
-  yKeys: z
-    .array(z.string())
-    .nullable()
-    .describe('Column name(s) for Y-axis values (null if not a chart)'),
-
-  // Metric-specific fields (null when not applicable)
-  label: z.string().nullable().describe('Metric label (null if not a metric)'),
+    .nullish()
+    .describe('Chart type - for chart type'),
+  xKey: z.string().nullish().describe('X-axis column - for chart type'),
+  yKeys: z.array(z.string()).nullish().describe('Y-axis columns - for chart type'),
+  // Metric fields (null/undefined when type is not metric)
+  label: z.string().nullish().describe('Metric label - for metric type'),
   format: z
     .enum(['number', 'currency', 'percent', 'duration'])
-    .nullable()
-    .describe('Value format (null if not a metric)'),
-
-  // Schema-specific fields (null when not applicable)
-  tables: z
-    .array(z.string())
-    .nullable()
-    .describe('Table names to display (null if not a schema response)')
+    .nullish()
+    .describe('Value format - for metric type'),
+  // Schema fields (null/undefined when type is not schema)
+  tables: z.array(z.string()).nullish().describe('Table names - for schema type')
 })
 
 import { DpStorage } from './storage'
 
 // Chat history store structure: map of connectionId -> sessions
 type ChatHistoryStore = Record<string, ChatSession[]>
-
-// Default models for each provider
-const DEFAULT_MODELS: Record<AIProvider, string> = {
-  openai: 'gpt-4o',
-  anthropic: 'claude-sonnet-4-5-20250929',
-  google: 'gemini-2.5-flash',
-  groq: 'llama-3.3-70b-versatile',
-  ollama: 'llama3.2'
-}
 
 // Store types
 interface AIStoreData {
@@ -280,7 +255,8 @@ export function getAIConfig(): AIConfig | null {
  */
 export function setAIConfig(config: AIConfig | null): void {
   if (!config) {
-    // Don't clear everything, just deactivate
+    // Don't clear everything when null is passed - use clearAIConfig() for that
+    console.log('[ai-service] setAIConfig called with null, ignoring. Use clearAIConfig() to clear.')
     return
   }
 
@@ -391,31 +367,39 @@ function buildSystemPrompt(schemas: SchemaInfo[], dbType: string): string {
 
 ${schemaContext}
 
-## Response Guidelines
+## Response Format
 
-Based on the user's request, respond with ONE of these types:
+Set the "type" field and fill ONLY the relevant fields. **IMPORTANT: All fields must be present in the response.** Set unused fields to null (not undefined). Include every field listed below.
 
-1. **query** - When user asks for data or wants to run a query
-   - Generate valid ${dbType} SQL
-   - Include LIMIT 100 for SELECT queries unless specified
-   - **CRITICAL: For UPDATE, DELETE, DROP, TRUNCATE, or any destructive operation:**
-     - Set \`requiresConfirmation: true\`
-     - Add a clear warning explaining the impact
-     - The query will NOT be auto-executed - user must manually review and run it
-   - For INSERT queries, include a warning but requiresConfirmation is optional
+### type: "query"
+Use when user asks for data or wants to run a query.
+- Fill: message, sql, explanation
+- Optional: warning, requiresConfirmation (set true for UPDATE/DELETE/DROP/TRUNCATE)
+- Null: title, description, chartType, xKey, yKeys, label, format, tables
+- Include LIMIT 100 for SELECT queries unless specified
 
-2. **chart** - When user asks to visualize, chart, graph, or plot data
-   - Choose appropriate chartType: bar (comparisons), line (time trends), pie (proportions ≤8 items), area (cumulative)
-   - SQL must return columns matching xKey and yKeys
+### type: "chart"
+Use when user asks to visualize, chart, graph, or plot data.
+- Fill: message, sql, title, chartType, xKey, yKeys
+- Optional: description
+- Null: explanation, warning, requiresConfirmation, label, format, tables
+- chartType: bar (comparisons), line (time trends), pie (proportions ≤8 items), area (cumulative)
 
-3. **metric** - When user asks for a single KPI/number (total, count, average)
-   - SQL must return exactly one value
-   - Choose format: number, currency, percent, or duration
+### type: "metric"
+Use when user asks for a single KPI/number (total, count, average).
+- Fill: message, sql, label, format
+- Null: explanation, warning, requiresConfirmation, title, description, chartType, xKey, yKeys, tables
+- format: number, currency, percent, or duration
 
-4. **schema** - When user asks about table structure or columns
-   - List the relevant table names
+### type: "schema"
+Use when user asks about table structure or columns.
+- Fill: message, tables
+- Null: sql, explanation, warning, requiresConfirmation, title, description, chartType, xKey, yKeys, label, format
 
-5. **message** - For general questions, clarifications, or when no SQL is needed
+### type: "message"
+Use for general questions, clarifications, or when no SQL is needed.
+- Fill: message
+- Null: ALL other fields
 
 ## SQL Guidelines
 - Use proper ${dbType} syntax
@@ -437,7 +421,7 @@ export async function validateAPIKey(
     await generateText({
       model,
       prompt: 'Say "ok"',
-      maxTokens: 5
+      maxOutputTokens: 5
     })
 
     return { valid: true }
@@ -490,30 +474,39 @@ export async function generateChatResponse(
       ? `Previous conversation:\n${conversationContext}\n\nUser's current request: ${lastUserMessage.content}`
       : lastUserMessage.content
 
-    // Use 'json' mode for OpenAI/Ollama to bypass strict structured outputs
-    // OpenAI's strict mode requires all fields in 'required' array which doesn't work with nullable fields
-    // 'json' mode just asks the model to output JSON and validates against schema client-side
-    const useJsonMode = config.provider === 'openai' || config.provider === 'ollama'
-
     const result = await generateObject({
       model,
       schema: responseSchema,
-      schemaName: 'DatabaseAssistantResponse',
-      schemaDescription:
-        'A structured response from the database assistant. The type field determines which other fields are relevant.',
       system: systemPrompt,
       prompt,
-      mode: useJsonMode ? 'json' : 'auto',
       temperature: 0.1 // Lower temperature for more consistent SQL generation
     })
 
+    // Normalize undefined to null for consistency
+    const normalizedData = {
+      ...result.object,
+      sql: result.object.sql ?? null,
+      explanation: result.object.explanation ?? null,
+      warning: result.object.warning ?? null,
+      requiresConfirmation: result.object.requiresConfirmation ?? null,
+      title: result.object.title ?? null,
+      description: result.object.description ?? null,
+      chartType: result.object.chartType ?? null,
+      xKey: result.object.xKey ?? null,
+      yKeys: result.object.yKeys ?? null,
+      label: result.object.label ?? null,
+      format: result.object.format ?? null,
+      tables: result.object.tables ?? null
+    }
+
     return {
       success: true,
-      data: result.object as AIStructuredResponse
+      data: normalizedData as AIStructuredResponse
     }
-  } catch (error) {
+  } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error'
-    console.error('[ai-service] generateChatResponse error:', error)
+    console.error('[ai-service] generateChatResponse error:', JSON.stringify(error, null, 2))
+
     return { success: false, error: message }
   }
 }

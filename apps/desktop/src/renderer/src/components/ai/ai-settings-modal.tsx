@@ -33,94 +33,9 @@ import {
 } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import type { AIProvider, AIMultiProviderConfig, AIProviderConfig } from '@shared/index'
+import { AI_PROVIDERS } from '@shared/index'
 
-const PROVIDERS = [
-  {
-    id: 'openai' as const,
-    name: 'OpenAI',
-    description: 'GPT-5, GPT-5.1, GPT-4o',
-    keyPrefix: 'sk-',
-    keyUrl: 'https://platform.openai.com/api-keys',
-    models: [
-      { id: 'gpt-5', name: 'GPT-5', recommended: true, description: 'Most capable' },
-      { id: 'gpt-5-mini', name: 'GPT-5 Mini', description: 'Balanced' },
-      { id: 'gpt-5-nano', name: 'GPT-5 Nano', description: 'Fast & efficient' },
-      { id: 'gpt-5.1', name: 'GPT-5.1', description: 'Latest update' },
-      { id: 'gpt-4o', name: 'GPT-4o', description: 'Previous gen' },
-      { id: 'gpt-4o-mini', name: 'GPT-4o Mini', description: 'Faster & cheaper' }
-    ]
-  },
-  {
-    id: 'anthropic' as const,
-    name: 'Anthropic',
-    description: 'Claude Opus 4.5, Claude Sonnet 4',
-    keyPrefix: 'sk-ant-',
-    keyUrl: 'https://console.anthropic.com/settings/keys',
-    models: [
-      {
-        id: 'claude-opus-4-5-20251101',
-        name: 'Claude Opus 4.5',
-        recommended: true,
-        description: 'Best for coding'
-      },
-      {
-        id: 'claude-haiku-4-5-20251001',
-        name: 'Claude Haiku 4.5',
-        description: 'Faster'
-      },
-      { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4', description: 'Balanced' },
-      { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet' },
-      { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku', description: 'Faster' }
-    ]
-  },
-  {
-    id: 'google' as const,
-    name: 'Google',
-    description: 'Gemini 3, Gemini 2.5',
-    keyPrefix: 'AI',
-    keyUrl: 'https://aistudio.google.com/app/apikey',
-    models: [
-      {
-        id: 'gemini-3-pro-preview',
-        name: 'Gemini 3 Pro',
-        recommended: true,
-        description: 'Most capable'
-      },
-      { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', description: 'Balanced' },
-      { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', description: 'Faster' },
-      { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', description: 'Previous gen' }
-    ]
-  },
-  {
-    id: 'groq' as const,
-    name: 'Groq',
-    description: 'Llama 3.3, Mixtral (Ultra Fast)',
-    keyPrefix: 'gsk_',
-    keyUrl: 'https://console.groq.com/keys',
-    models: [
-      { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B', recommended: true },
-      { id: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B', description: 'Fastest' },
-      { id: 'mixtral-8x7b-32768', name: 'Mixtral 8x7B' },
-      { id: 'qwen-qwq-32b', name: 'Qwen QwQ 32B', description: 'Reasoning' }
-    ]
-  },
-  {
-    id: 'ollama' as const,
-    name: 'Ollama',
-    description: 'Local models (no API key)',
-    keyPrefix: null,
-    keyUrl: 'https://ollama.ai',
-    models: [
-      { id: 'llama3.2', name: 'Llama 3.2', recommended: true },
-      { id: 'qwen2.5-coder:32b', name: 'Qwen 2.5 Coder 32B', description: 'Best for SQL' },
-      { id: 'codellama', name: 'Code Llama' },
-      { id: 'mistral', name: 'Mistral' },
-      { id: 'deepseek-coder-v2', name: 'DeepSeek Coder V2' }
-    ]
-  }
-]
-
-type ProviderId = (typeof PROVIDERS)[number]['id']
+type ProviderId = AIProvider
 
 interface AISettingsModalProps {
   isOpen: boolean
@@ -149,7 +64,7 @@ export function AISettingsModal({
   const [validationResult, setValidationResult] = React.useState<'success' | 'error' | null>(null)
   const [isSaving, setIsSaving] = React.useState(false)
 
-  const providerConfig = PROVIDERS.find((p) => p.id === selectedProvider)!
+  const providerConfig = AI_PROVIDERS.find((p) => p.id === selectedProvider)!
 
   // Check if a provider has a saved config
   const hasProviderConfig = (providerId: ProviderId): boolean => {
@@ -167,8 +82,8 @@ export function AISettingsModal({
   // Get saved model for a provider
   const getSavedModel = (providerId: ProviderId): string => {
     const defaultModel =
-      PROVIDERS.find((p) => p.id === providerId)?.models.find((m) => m.recommended)?.id ||
-      PROVIDERS.find((p) => p.id === providerId)?.models[0]?.id ||
+      AI_PROVIDERS.find((p) => p.id === providerId)?.models.find((m) => m.recommended)?.id ||
+      AI_PROVIDERS.find((p) => p.id === providerId)?.models[0]?.id ||
       ''
     return multiProviderConfig?.activeModels?.[providerId] || defaultModel
   }
@@ -296,7 +211,7 @@ export function AISettingsModal({
           <div className="space-y-2">
             <Label className="text-xs">Providers</Label>
             <div className="grid grid-cols-5 gap-2">
-              {PROVIDERS.map((p) => {
+              {AI_PROVIDERS.map((p) => {
                 const hasConfig = hasProviderConfig(p.id)
                 const isActive = activeProvider === p.id
                 return (
@@ -496,7 +411,7 @@ export function AISettingsModal({
         <DialogFooter className="px-6 py-4 border-t bg-muted/20">
           <div className="flex items-center justify-end w-full">
             <Button variant="outline" size="sm" onClick={onClose}>
-              Done
+              Close
             </Button>
           </div>
         </DialogFooter>
